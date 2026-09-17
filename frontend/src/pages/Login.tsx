@@ -45,9 +45,9 @@ export default function Login() {
           IPCC
         </h1>
         <img
-          src="./public/IPPC_logo.png"
+          src="./IPPC_logo.png"
           alt="Igreja Portugal para Cristo"
-          className="h-16"
+          className="h-36"
         />
       </div>
 

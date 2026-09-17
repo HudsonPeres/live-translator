@@ -134,7 +134,7 @@ export default function AdminUsers() {
           <br />
           IPCC
         </h1>
-        <img src="/IPPC_logo.png" alt="IPCC" className="h-16" />
+        <img src="/IPPC_logo.png" alt="IPCC" className="h-36" />
       </div>
 
       <div className="w-full max-w-md bg-purple-400 text-white text-center rounded-full py-3 font-bold tracking-wide mb-6">

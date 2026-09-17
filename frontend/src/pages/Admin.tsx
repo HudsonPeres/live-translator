@@ -24,7 +24,7 @@ export default function Admin() {
           <br />
           IPCC
         </h1>
-        <img src="/IPPC_logo.png" alt="IPCC" className="h-16" />
+        <img src="/IPPC_logo.png" alt="IPCC" className="h-36" />
       </div>
 
       {/* Título SUPER USER */}

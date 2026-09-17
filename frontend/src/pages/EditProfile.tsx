@@ -68,7 +68,7 @@ export default function EditProfile() {
         <img
           src="/IPPC_logo.png"
           alt="Igreja Portugal para Cristo"
-          className="h-16"
+          className="h-36"
         />
       </div>
 
