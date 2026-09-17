@@ -130,7 +130,7 @@ export default function Translator() {
 
       {/* ===== BEM VINDO ===== */}
       <p className="w-full max-w-md text-center text-lg font-semibold mb-4">
-        BEM VINDO {user.username.toUpperCase()}.
+        BEM VINDO, {user.username.toUpperCase()}.
       </p>
 
       {/* ===== SELECT LANGUAGE ===== */}

@@ -243,7 +243,7 @@ export default function Home() {
 
               <p className="text-center mt-4 font-bold tracking-wide text-sm">
                 {isConnecting
-                  ? "A CONECTAR..."
+                  ? "CONNECTING..."
                   : isListening
                     ? "YOU ARE LISTENING"
                     : isOnline
