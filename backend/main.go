@@ -401,10 +401,6 @@ func resetPasswordHandler(c *gin.Context) {
 // HANDLERS: LIVEKIT
 // ============================================
 
-// POST /api/token
-// Gera um token de acesso ao LiveKit.
-// Subscriber (ouvinte): acesso publico, sem autenticacao.
-// Publisher (tradutor): exige JWT valido no header Authorization.
 func generateLiveKitTokenHandler(c *gin.Context) {
 	var input struct {
 		Room     string `json:"room" binding:"required"`
@@ -475,8 +471,6 @@ func generateLiveKitTokenHandler(c *gin.Context) {
 	})
 }
 
-// GET /api/rooms/:room/status
-// Verifica se existe algum publisher ativo na sala.
 func roomStatusHandler(c *gin.Context) {
 	roomName := c.Param("room")
 
@@ -580,7 +574,7 @@ func main() {
 		log.Fatal("Variaveis LIVEKIT_API_KEY, LIVEKIT_API_SECRET e LIVEKIT_URL sao obrigatorias")
 	}
 
-		sslmode := os.Getenv("DB_SSLMODE")
+	sslmode := os.Getenv("DB_SSLMODE")
 	if sslmode == "" {
 		sslmode = "disable"
 	}
@@ -608,7 +602,12 @@ func main() {
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "https://ltc-vert.vercel.app/"},
+		AllowOrigins: []string{
+			"http://localhost:5173",
+			"https://ltc-vert.vercel.app",
+			"https://ltc-git-main-hudsonperes-projects.vercel.app",
+			"https://ltc-80xeztqwh-hudsonperes-projects.vercel.app",
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -619,8 +618,8 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 	r.POST("/api/login", loginHandler)
-	r.POST("/api/token", generateLiveKitTokenHandler)          // publico (subscriber); exige JWT para publisher
-	r.GET("/api/rooms/:room/status", roomStatusHandler)         // publico
+	r.POST("/api/token", generateLiveKitTokenHandler)
+	r.GET("/api/rooms/:room/status", roomStatusHandler)
 
 	// Rotas protegidas
 	api := r.Group("/api")
