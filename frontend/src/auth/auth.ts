@@ -25,3 +25,7 @@ export function logout() {
 export function isLoggedIn(): boolean {
   return !!getToken();
 }
+
+export function updateStoredUser(user: User) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}

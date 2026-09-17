@@ -1,4 +1,5 @@
-version: '3.8'
+version: "3.8"
+
 services:
   db:
     image: postgres:15-alpine
@@ -11,6 +12,27 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit-server
+    restart: unless-stopped
+    command: >
+      --dev
+      --bind 0.0.0.0
+      --keys "devkey: secret"
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    environment:
+      LIVEKIT_KEYS: "devkey: secret"
+    networks:
+      - livekit-network
+
+networks:
+  livekit-network:
+    driver: bridge
 
 volumes:
   postgres_data:

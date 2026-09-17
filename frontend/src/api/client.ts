@@ -1,5 +1,4 @@
-const API_URL = "http://localhost:8080";
-
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 export interface User {
   id: number;
   username: string;
@@ -109,5 +108,58 @@ export async function resetPassword(
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || "Erro ao resetar password");
   }
+  return res.json();
+}
+
+export async function updateProfile(
+  token: string,
+  data: { email?: string; password?: string },
+): Promise<User> {
+  const res = await fetch(`${API_URL}/api/profile`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao atualizar perfil");
+  }
+  return res.json();
+}
+
+export async function getToken(
+  room: string,
+  identity: string,
+  role: "publisher" | "subscriber",
+  jwt?: string,
+): Promise<{ token: string; url: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (jwt) {
+    headers["Authorization"] = `Bearer ${jwt}`;
+  }
+
+  const res = await fetch(`${API_URL}/api/token`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ room, identity, role }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Erro ${res.status}: falha ao obter token`);
+  }
+  return res.json();
+}
+
+export async function getRoomStatus(
+  room: string,
+): Promise<{ online: boolean }> {
+  const res = await fetch(`${API_URL}/api/rooms/${room}/status`);
+  if (!res.ok) return { online: false };
   return res.json();
 }

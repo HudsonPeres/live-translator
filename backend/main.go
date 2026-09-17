@@ -1,21 +1,26 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"github.com/livekit/protocol/auth"
+	livekit "github.com/livekit/protocol/livekit"
+	lksdk "github.com/livekit/server-sdk-go/v2"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"crypto/rand"
-"math/big"
 )
 
 type User struct {
@@ -27,10 +32,16 @@ type User struct {
 }
 
 var db *gorm.DB
-var jwtSecret []byte // Será preenchida a partir do .env
+var jwtSecret []byte
+
+// Salas permitidas (whitelist para evitar criacao de salas arbitrarias)
+var allowedRooms = map[string]bool{
+	"english":  true,
+	"espanhol": true,
+}
 
 // ============================================
-// UTILITÁRIOS: JWT
+// UTILITARIOS: JWT
 // ============================================
 
 func generateToken(user User) (string, error) {
@@ -45,7 +56,6 @@ func generateToken(user User) (string, error) {
 	return token.SignedString(jwtSecret)
 }
 
-// Gera uma password aleatória para reset
 func generateRandomPassword(length int) string {
 	const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	b := make([]byte, length)
@@ -60,7 +70,7 @@ func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token não fornecido"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token nao fornecido"})
 			c.Abort()
 			return
 		}
@@ -69,7 +79,7 @@ func authMiddleware() gin.HandlerFunc {
 		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 			tokenString = authHeader[7:]
 		} else {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Formato do token inválido"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Formato do token invalido"})
 			c.Abort()
 			return
 		}
@@ -79,14 +89,14 @@ func authMiddleware() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido ou expirado"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token invalido ou expirado"})
 			c.Abort()
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Claims inválidas"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Claims invalidas"})
 			c.Abort()
 			return
 		}
@@ -98,7 +108,6 @@ func authMiddleware() gin.HandlerFunc {
 	}
 }
 
-// Middleware que exige role SUPER_USER
 func superUserMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
@@ -112,7 +121,7 @@ func superUserMiddleware() gin.HandlerFunc {
 }
 
 // ============================================
-// HANDLERS
+// HANDLERS: AUTH
 // ============================================
 
 func loginHandler(c *gin.Context) {
@@ -122,18 +131,18 @@ func loginHandler(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username e password são obrigatórios"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username e password sao obrigatorios"})
 		return
 	}
 
 	var user User
 	if err := db.Where("username = ?", input.Username).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Credenciais inválidas"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Credenciais invalidas"})
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Credenciais inválidas"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Credenciais invalidas"})
 		return
 	}
 
@@ -158,13 +167,71 @@ func meHandler(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	var user User
 	if err := db.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador nao encontrado"})
 		return
 	}
 	c.JSON(http.StatusOK, user)
 }
 
-// POST /api/users  (apenas SUPER_USER)
+// ============================================
+// HANDLERS: PERFIL
+// ============================================
+
+func updateOwnProfileHandler(c *gin.Context) {
+	userID := c.GetUint("user_id")
+
+	var user User
+	if err := db.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador nao encontrado"})
+		return
+	}
+
+	var input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if input.Email != "" && input.Email != user.Email {
+		var existing User
+		if err := db.Where("email = ? AND id != ?", input.Email, user.ID).
+			First(&existing).Error; err == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email ja esta em uso"})
+			return
+		}
+		user.Email = input.Email
+	}
+
+	if input.Password != "" {
+		if len(input.Password) < 6 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password deve ter pelo menos 6 caracteres"})
+			return
+		}
+		hashed, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+		user.Password = string(hashed)
+	}
+
+	if err := db.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar perfil"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+		"role":     user.Role,
+	})
+}
+
+// ============================================
+// HANDLERS: USERS (SUPER_USER)
+// ============================================
+
 func createUserHandler(c *gin.Context) {
 	var input struct {
 		Username string `json:"username" binding:"required,min=3"`
@@ -178,11 +245,10 @@ func createUserHandler(c *gin.Context) {
 		return
 	}
 
-	// Verificar duplicados (username ou email)
 	var existing User
 	if err := db.Where("username = ? OR email = ?", input.Username, input.Email).
 		First(&existing).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Username ou email já existe"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Username ou email ja existe"})
 		return
 	}
 
@@ -212,7 +278,6 @@ func createUserHandler(c *gin.Context) {
 	})
 }
 
-// GET /api/users  (apenas SUPER_USER)
 func listUsersHandler(c *gin.Context) {
 	var users []User
 	if err := db.Find(&users).Error; err != nil {
@@ -222,20 +287,19 @@ func listUsersHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
-// PUT /api/users/:id  (apenas SUPER_USER)
 func updateUserHandler(c *gin.Context) {
 	id := c.Param("id")
 
 	var user User
 	if err := db.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador nao encontrado"})
 		return
 	}
 
 	var input struct {
 		Username string `json:"username"`
-		Email    string `json:"email"`   
-		Password string `json:"password"` 
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -243,29 +307,26 @@ func updateUserHandler(c *gin.Context) {
 		return
 	}
 
-	// Atualizar username (verificar duplicado)
 	if input.Username != "" && input.Username != user.Username {
 		var existing User
 		if err := db.Where("username = ? AND id != ?", input.Username, user.ID).
 			First(&existing).Error; err == nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "Username já existe"})
+			c.JSON(http.StatusConflict, gin.H{"error": "Username ja existe"})
 			return
 		}
 		user.Username = input.Username
 	}
 
-	// Atualizar email (verificar duplicado)
 	if input.Email != "" && input.Email != user.Email {
 		var existing User
 		if err := db.Where("email = ? AND id != ?", input.Email, user.ID).
 			First(&existing).Error; err == nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "Email já existe"})
+			c.JSON(http.StatusConflict, gin.H{"error": "Email ja existe"})
 			return
 		}
 		user.Email = input.Email
 	}
 
-	// Atualizar password
 	if input.Password != "" {
 		if len(input.Password) < 6 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Password deve ter pelo menos 6 caracteres"})
@@ -288,20 +349,18 @@ func updateUserHandler(c *gin.Context) {
 	})
 }
 
-// DELETE /api/users/:id  (apenas SUPER_USER)
 func deleteUserHandler(c *gin.Context) {
 	id := c.Param("id")
 
-	// Impedir que o próprio Super User se apague a si mesmo
 	currentUserID := c.GetUint("user_id")
 	if id == fmt.Sprint(currentUserID) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Não pode apagar o próprio utilizador"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nao pode apagar o proprio utilizador"})
 		return
 	}
 
 	var user User
 	if err := db.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador nao encontrado"})
 		return
 	}
 
@@ -313,17 +372,15 @@ func deleteUserHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Utilizador apagado"})
 }
 
-// POST /api/users/:id/reset-password  (apenas SUPER_USER)
 func resetPasswordHandler(c *gin.Context) {
 	id := c.Param("id")
 
 	var user User
 	if err := db.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador nao encontrado"})
 		return
 	}
 
-	// Gerar nova password temporária
 	newPassword := generateRandomPassword(10)
 	hashed, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 
@@ -333,8 +390,6 @@ func resetPasswordHandler(c *gin.Context) {
 		return
 	}
 
-	// MVP: retorna a password na resposta para o Super User copiar.
-	// TODO (produção): enviar por email e NUNCA retornar na resposta.
 	c.JSON(http.StatusOK, gin.H{
 		"message":      "Password resetada com sucesso",
 		"new_password": newPassword,
@@ -343,7 +398,134 @@ func resetPasswordHandler(c *gin.Context) {
 }
 
 // ============================================
-// SEED: cria o Super User usando variáveis do .env
+// HANDLERS: LIVEKIT
+// ============================================
+
+// POST /api/token
+// Gera um token de acesso ao LiveKit.
+// Subscriber (ouvinte): acesso publico, sem autenticacao.
+// Publisher (tradutor): exige JWT valido no header Authorization.
+func generateLiveKitTokenHandler(c *gin.Context) {
+	var input struct {
+		Room     string `json:"room" binding:"required"`
+		Identity string `json:"identity" binding:"required"`
+		Role     string `json:"role" binding:"required,oneof=publisher subscriber"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Whitelist de salas
+	if !allowedRooms[input.Room] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Sala invalida"})
+		return
+	}
+
+	// Publisher exige JWT valido
+	if input.Role == "publisher" {
+		authHeader := c.GetHeader("Authorization")
+		if len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Autenticacao requerida para publicar"})
+			return
+		}
+		tokenStr := authHeader[7:]
+		tok, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+		if err != nil || !tok.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token invalido para publicar"})
+			return
+		}
+	}
+
+	// Gerar token LiveKit
+	at := auth.NewAccessToken(
+		os.Getenv("LIVEKIT_API_KEY"),
+		os.Getenv("LIVEKIT_API_SECRET"),
+	)
+
+	grant := &auth.VideoGrant{
+		RoomJoin: true,
+		Room:     input.Room,
+	}
+
+	if input.Role == "publisher" {
+		grant.SetCanPublish(true)
+		grant.SetCanSubscribe(true)
+	} else {
+		grant.SetCanPublish(false)
+		grant.SetCanSubscribe(true)
+	}
+
+	at.SetVideoGrant(grant).
+		SetIdentity(input.Identity).
+		SetValidFor(time.Hour)
+
+	token, err := at.ToJWT()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao gerar token LiveKit"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"url":   os.Getenv("LIVEKIT_URL"),
+	})
+}
+
+// GET /api/rooms/:room/status
+// Verifica se existe algum publisher ativo na sala.
+func roomStatusHandler(c *gin.Context) {
+	roomName := c.Param("room")
+
+	if !allowedRooms[roomName] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Sala invalida"})
+		return
+	}
+
+	// RoomServiceClient precisa de http(s), nao ws(s)
+	host := os.Getenv("LIVEKIT_URL")
+	host = strings.Replace(host, "wss://", "https://", 1)
+	host = strings.Replace(host, "ws://", "http://", 1)
+
+	roomClient := lksdk.NewRoomServiceClient(
+		host,
+		os.Getenv("LIVEKIT_API_KEY"),
+		os.Getenv("LIVEKIT_API_SECRET"),
+	)
+
+	res, err := roomClient.ListParticipants(
+		context.Background(),
+		&livekit.ListParticipantsRequest{Room: roomName},
+	)
+
+	if err != nil {
+		// Sala nao existe ou erro de conexao -> offline
+		c.JSON(http.StatusOK, gin.H{"online": false})
+		return
+	}
+
+	// Considera online se algum participante tiver uma track de audio publicada
+	online := false
+	for _, p := range res.Participants {
+		for _, t := range p.Tracks {
+			if t.Type == livekit.TrackType_AUDIO {
+				online = true
+				break
+			}
+		}
+		if online {
+			break
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"online": online})
+}
+
+// ============================================
+// SEED
 // ============================================
 
 func seedSuperUser() {
@@ -357,9 +539,8 @@ func seedSuperUser() {
 	email := os.Getenv("SUPER_USER_EMAIL")
 	password := os.Getenv("SUPER_USER_PASSWORD")
 
-	// Segurança: se alguma variável estiver vazia, não cria nada
 	if username == "" || email == "" || password == "" {
-		log.Println(" Variáveis do Super User não definidas no .env — seed ignorado")
+		log.Println("Variaveis do Super User nao definidas no .env - seed ignorado")
 		return
 	}
 
@@ -373,12 +554,11 @@ func seedSuperUser() {
 	}
 
 	if err := db.Create(&superUser).Error; err != nil {
-		log.Println(" Erro ao criar Super User:", err)
+		log.Println("Erro ao criar Super User:", err)
 		return
 	}
 
-	// NUNCA logar a password, apenas o username
-	fmt.Printf(" Super User criado: %s\n", username)
+	fmt.Printf("Super User criado: %s\n", username)
 }
 
 // ============================================
@@ -386,18 +566,20 @@ func seedSuperUser() {
 // ============================================
 
 func main() {
-	// 1. Carregar variáveis do .env
 	if err := godotenv.Load(); err != nil {
-		log.Println("Arquivo .env não encontrado, usando variáveis do sistema")
+		log.Println("Arquivo .env nao encontrado, usando variaveis do sistema")
 	}
 
-	// 2. Verificar segredos obrigatórios 
 	jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 	if len(jwtSecret) < 32 {
-		log.Fatal("JWT_SECRET ausente ou muito curto no .env (mínimo 32 caracteres)")
+		log.Fatal("JWT_SECRET ausente ou muito curto no .env (minimo 32 caracteres)")
 	}
 
-	// 3. Conectar ao PostgreSQL usando variáveis do .env 
+	// Validar variaveis do LiveKit
+	if os.Getenv("LIVEKIT_API_KEY") == "" || os.Getenv("LIVEKIT_API_SECRET") == "" || os.Getenv("LIVEKIT_URL") == "" {
+		log.Fatal("Variaveis LIVEKIT_API_KEY, LIVEKIT_API_SECRET e LIVEKIT_URL sao obrigatorias")
+	}
+
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
 		os.Getenv("DB_HOST"),
@@ -418,7 +600,6 @@ func main() {
 
 	seedSuperUser()
 
-	// 4. Servidor
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173"},
@@ -427,27 +608,32 @@ func main() {
 		AllowCredentials: true,
 	}))
 
+	// Rotas publicas
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 	r.POST("/api/login", loginHandler)
+	r.POST("/api/token", generateLiveKitTokenHandler)          // publico (subscriber); exige JWT para publisher
+	r.GET("/api/rooms/:room/status", roomStatusHandler)         // publico
 
-		api := r.Group("/api")
+	// Rotas protegidas
+	api := r.Group("/api")
 	api.Use(authMiddleware())
 	{
 		api.GET("/me", meHandler)
+		api.PUT("/profile", updateOwnProfileHandler)
 
-		// Rotas exclusivas do Super User
-				admin := api.Group("")
+		admin := api.Group("")
 		admin.Use(superUserMiddleware())
 		{
 			admin.POST("/users", createUserHandler)
 			admin.GET("/users", listUsersHandler)
-			admin.PUT("/users/:id", updateUserHandler)              
-			admin.DELETE("/users/:id", deleteUserHandler)           
-			admin.POST("/users/:id/reset-password", resetPasswordHandler) 
+			admin.PUT("/users/:id", updateUserHandler)
+			admin.DELETE("/users/:id", deleteUserHandler)
+			admin.POST("/users/:id/reset-password", resetPasswordHandler)
 		}
 	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
