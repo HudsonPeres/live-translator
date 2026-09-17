@@ -14,6 +14,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"crypto/rand"
+"math/big"
 )
 
 type User struct {
@@ -41,6 +43,17 @@ func generateToken(user User) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtSecret)
+}
+
+// Gera uma password aleatória para reset
+func generateRandomPassword(length int) string {
+	const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	b := make([]byte, length)
+	for i := range b {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		b[i] = chars[n.Int64()]
+	}
+	return string(b)
 }
 
 func authMiddleware() gin.HandlerFunc {
@@ -209,6 +222,126 @@ func listUsersHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
+// PUT /api/users/:id  (apenas SUPER_USER)
+func updateUserHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	var user User
+	if err := db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		return
+	}
+
+	var input struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`   
+		Password string `json:"password"` 
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Atualizar username (verificar duplicado)
+	if input.Username != "" && input.Username != user.Username {
+		var existing User
+		if err := db.Where("username = ? AND id != ?", input.Username, user.ID).
+			First(&existing).Error; err == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Username já existe"})
+			return
+		}
+		user.Username = input.Username
+	}
+
+	// Atualizar email (verificar duplicado)
+	if input.Email != "" && input.Email != user.Email {
+		var existing User
+		if err := db.Where("email = ? AND id != ?", input.Email, user.ID).
+			First(&existing).Error; err == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email já existe"})
+			return
+		}
+		user.Email = input.Email
+	}
+
+	// Atualizar password
+	if input.Password != "" {
+		if len(input.Password) < 6 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password deve ter pelo menos 6 caracteres"})
+			return
+		}
+		hashed, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+		user.Password = string(hashed)
+	}
+
+	if err := db.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+		"role":     user.Role,
+	})
+}
+
+// DELETE /api/users/:id  (apenas SUPER_USER)
+func deleteUserHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	// Impedir que o próprio Super User se apague a si mesmo
+	currentUserID := c.GetUint("user_id")
+	if id == fmt.Sprint(currentUserID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Não pode apagar o próprio utilizador"})
+		return
+	}
+
+	var user User
+	if err := db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		return
+	}
+
+	if err := db.Delete(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao apagar"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Utilizador apagado"})
+}
+
+// POST /api/users/:id/reset-password  (apenas SUPER_USER)
+func resetPasswordHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	var user User
+	if err := db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Utilizador não encontrado"})
+		return
+	}
+
+	// Gerar nova password temporária
+	newPassword := generateRandomPassword(10)
+	hashed, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+
+	user.Password = string(hashed)
+	if err := db.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar password"})
+		return
+	}
+
+	// MVP: retorna a password na resposta para o Super User copiar.
+	// TODO (produção): enviar por email e NUNCA retornar na resposta.
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "Password resetada com sucesso",
+		"new_password": newPassword,
+		"email":        user.Email,
+	})
+}
+
 // ============================================
 // SEED: cria o Super User usando variáveis do .env
 // ============================================
@@ -305,14 +438,16 @@ func main() {
 		api.GET("/me", meHandler)
 
 		// Rotas exclusivas do Super User
-		admin := api.Group("")
+				admin := api.Group("")
 		admin.Use(superUserMiddleware())
 		{
 			admin.POST("/users", createUserHandler)
 			admin.GET("/users", listUsersHandler)
+			admin.PUT("/users/:id", updateUserHandler)              
+			admin.DELETE("/users/:id", deleteUserHandler)           
+			admin.POST("/users/:id/reset-password", resetPasswordHandler) 
 		}
 	}
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

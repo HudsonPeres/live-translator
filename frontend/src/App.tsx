@@ -4,15 +4,19 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Translator from "./pages/Translator";
 import EditProfile from "./pages/EditProfile";
+import Admin from "./pages/Admin";
+import AdminUsers from "./pages/AdminUsers";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Públicas */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
 
+        {/* Protegidas (exigem login) */}
         <Route
           path="/translate"
           element={
@@ -31,18 +35,20 @@ export default function App() {
           }
         />
 
-        {/* Placeholder — Admin/Super User (vamos criar depois) */}
         <Route
           path="/admin"
           element={
             <ProtectedRoute>
-              <div className="p-8 text-center">
-                Painel Super User (a fazer)
-                <br />
-                <a href="/translate" className="text-blue-600 underline">
-                  Voltar
-                </a>
-              </div>
+              <Admin />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute>
+              <AdminUsers />
             </ProtectedRoute>
           }
         />
