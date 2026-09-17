@@ -10,7 +10,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv" // ⬅️ NOVO
+	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -25,7 +25,7 @@ type User struct {
 }
 
 var db *gorm.DB
-var jwtSecret []byte // ⬅️ Será preenchida a partir do .env
+var jwtSecret []byte // Será preenchida a partir do .env
 
 // ============================================
 // UTILITÁRIOS: JWT
@@ -85,6 +85,19 @@ func authMiddleware() gin.HandlerFunc {
 	}
 }
 
+// Middleware que exige role SUPER_USER
+func superUserMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists || role != "SUPER_USER" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Acesso restrito ao Super User"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 // ============================================
 // HANDLERS
 // ============================================
@@ -138,8 +151,66 @@ func meHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// POST /api/users  (apenas SUPER_USER)
+func createUserHandler(c *gin.Context) {
+	var input struct {
+		Username string `json:"username" binding:"required,min=3"`
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required,min=6"`
+		Role     string `json:"role" binding:"required,oneof=TRANSLATOR SUPER_USER"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verificar duplicados (username ou email)
+	var existing User
+	if err := db.Where("username = ? OR email = ?", input.Username, input.Email).
+		First(&existing).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Username ou email já existe"})
+		return
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao processar password"})
+		return
+	}
+
+	newUser := User{
+		Username: input.Username,
+		Email:    input.Email,
+		Password: string(hashed),
+		Role:     input.Role,
+	}
+
+	if err := db.Create(&newUser).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criar utilizador"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":       newUser.ID,
+		"username": newUser.Username,
+		"email":    newUser.Email,
+		"role":     newUser.Role,
+	})
+}
+
+// GET /api/users  (apenas SUPER_USER)
+func listUsersHandler(c *gin.Context) {
+	var users []User
+	if err := db.Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao listar utilizadores"})
+		return
+	}
+	c.JSON(http.StatusOK, users)
+}
+
 // ============================================
-// SEED: cria o Super User usando variáveis do .env ⬅️
+// SEED: cria o Super User usando variáveis do .env
 // ============================================
 
 func seedSuperUser() {
@@ -155,7 +226,7 @@ func seedSuperUser() {
 
 	// Segurança: se alguma variável estiver vazia, não cria nada
 	if username == "" || email == "" || password == "" {
-		log.Println("⚠️  Variáveis do Super User não definidas no .env — seed ignorado")
+		log.Println(" Variáveis do Super User não definidas no .env — seed ignorado")
 		return
 	}
 
@@ -169,12 +240,12 @@ func seedSuperUser() {
 	}
 
 	if err := db.Create(&superUser).Error; err != nil {
-		log.Println("⚠️  Erro ao criar Super User:", err)
+		log.Println(" Erro ao criar Super User:", err)
 		return
 	}
 
 	// NUNCA logar a password, apenas o username
-	fmt.Printf("👤 Super User criado: %s\n", username)
+	fmt.Printf(" Super User criado: %s\n", username)
 }
 
 // ============================================
@@ -184,16 +255,16 @@ func seedSuperUser() {
 func main() {
 	// 1. Carregar variáveis do .env
 	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️  Arquivo .env não encontrado, usando variáveis do sistema")
+		log.Println("Arquivo .env não encontrado, usando variáveis do sistema")
 	}
 
-	// 2. Verificar segredos obrigatórios ⬅️
+	// 2. Verificar segredos obrigatórios 
 	jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 	if len(jwtSecret) < 32 {
-		log.Fatal("❌ JWT_SECRET ausente ou muito curto no .env (mínimo 32 caracteres)")
+		log.Fatal("JWT_SECRET ausente ou muito curto no .env (mínimo 32 caracteres)")
 	}
 
-	// 3. Conectar ao PostgreSQL usando variáveis do .env ⬅️
+	// 3. Conectar ao PostgreSQL usando variáveis do .env 
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
 		os.Getenv("DB_HOST"),
@@ -207,10 +278,10 @@ func main() {
 	if err != nil {
 		log.Fatal("Falha ao conectar no banco de dados:", err)
 	}
-	fmt.Println("✅ Conectado ao PostgreSQL")
+	fmt.Println("Conectado ao PostgreSQL")
 
 	db.AutoMigrate(&User{})
-	fmt.Println("✅ Migrations aplicadas")
+	fmt.Println("Migrations aplicadas")
 
 	seedSuperUser()
 
@@ -228,16 +299,24 @@ func main() {
 	})
 	r.POST("/api/login", loginHandler)
 
-	api := r.Group("/api")
+		api := r.Group("/api")
 	api.Use(authMiddleware())
 	{
 		api.GET("/me", meHandler)
+
+		// Rotas exclusivas do Super User
+		admin := api.Group("")
+		admin.Use(superUserMiddleware())
+		{
+			admin.POST("/users", createUserHandler)
+			admin.GET("/users", listUsersHandler)
+		}
 	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	fmt.Printf("🚀 Servidor em http://localhost:%s\n", port)
+	fmt.Printf("Servidor em http://localhost:%s\n", port)
 	r.Run(":" + port)
 }

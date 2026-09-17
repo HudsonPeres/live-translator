@@ -1,17 +1,52 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+// src/App.tsx
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Translator from "./pages/Translator";
+import EditProfile from "./pages/EditProfile";
+import ProtectedRoute from "./components/ProtectedRoute";
 
-function App() {
+export default function App() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900">
-      <h1 className="text-5xl font-bold text-white">
-        Live Translator
-      </h1>
-    </div>
-  )
-}
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
 
-export default App
+        <Route
+          path="/translate"
+          element={
+            <ProtectedRoute>
+              <Translator />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <EditProfile />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Placeholder — Admin/Super User (vamos criar depois) */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <div className="p-8 text-center">
+                Painel Super User (a fazer)
+                <br />
+                <a href="/translate" className="text-blue-600 underline">
+                  Voltar
+                </a>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
