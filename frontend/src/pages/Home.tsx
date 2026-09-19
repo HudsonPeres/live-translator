@@ -158,6 +158,8 @@ export default function Home() {
           Center
           <br />
           IPCC
+          <br />
+          Covilhã
         </h1>
         <img
           src="/IPPC_logo.png"
