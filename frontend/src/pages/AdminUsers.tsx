@@ -132,7 +132,7 @@ export default function AdminUsers() {
           <br />
           Center
           <br />
-          IPCC
+          IPPC
         </h1>
         <img src="/IPPC_logo.png" alt="IPCC" className="h-36" />
       </div>

@@ -42,7 +42,7 @@ export default function Login() {
           <br />
           Center
           <br />
-          IPCC
+          IPPC
         </h1>
         <img
           src="./IPPC_logo.png"

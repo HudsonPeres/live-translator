@@ -157,7 +157,7 @@ export default function Home() {
           <br />
           Center
           <br />
-          IPCC
+          IPPC
           <br />
           Covilhã
         </h1>

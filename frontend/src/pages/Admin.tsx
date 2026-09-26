@@ -22,7 +22,7 @@ export default function Admin() {
           <br />
           Center
           <br />
-          IPCC
+          IPPC
         </h1>
         <img src="/IPPC_logo.png" alt="IPCC" className="h-36" />
       </div>

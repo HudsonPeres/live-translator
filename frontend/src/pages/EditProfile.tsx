@@ -63,7 +63,7 @@ export default function EditProfile() {
           <br />
           Center
           <br />
-          IPCC
+          IPPPC
         </h1>
         <img
           src="/IPPC_logo.png"
