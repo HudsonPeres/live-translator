@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../api/client";
 import { saveAuth } from "../auth/auth";
+import Header from "../components/Header";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -33,23 +34,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center px-6 pt-8">
-      {/* Header com logo */}
-      <div className="w-full max-w-md flex justify-between items-start mb-16">
-        <h1 className="text-2xl font-bold text-black leading-tight">
-          Live
-          <br />
-          Translating
-          <br />
-          Center
-          <br />
-          IPPC
-        </h1>
-        <img
-          src="./IPPC_logo.png"
-          alt="Igreja Portugal para Cristo"
-          className="h-36"
-        />
-      </div>
+      {/* Header */}
+      <Header />
 
       {/* Título LOGIN */}
       <div className="w-full max-w-md bg-black rounded-full py-4 mb-8">

@@ -1,6 +1,7 @@
-// src/pages/Admin.tsx
 import { Link, useNavigate } from "react-router-dom";
 import { getUser, logout } from "../auth/auth";
+import Footer from "../components/Footer";
+import Header from "../components/Header";
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -14,18 +15,7 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center px-6 pt-8 pb-8">
       {/* Header */}
-      <div className="w-full max-w-md flex justify-between items-start mb-6">
-        <h1 className="text-2xl font-bold leading-tight">
-          Live
-          <br />
-          Translating
-          <br />
-          Center
-          <br />
-          IPPC
-        </h1>
-        <img src="/IPPC_logo.png" alt="IPCC" className="h-36" />
-      </div>
+      <Header />
 
       {/* Título SUPER USER */}
       <div className="w-full max-w-md bg-purple-400 text-white text-center rounded-full py-3 font-bold tracking-wide text-lg mb-10">
@@ -65,10 +55,7 @@ export default function Admin() {
         </button>
       </div>
 
-      <footer className="w-full max-w-md text-center mt-6 text-xs text-gray-500">
-        <p className="font-semibold">Versão Beta</p>
-        <p>Desenvolvido por Hudson Peres</p>
-      </footer>
+      <Footer />
     </div>
   );
 }

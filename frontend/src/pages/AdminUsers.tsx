@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import Footer from "../components/Footer";
+import Header from "../components/Header";
 import {
   listUsers,
   createUser,
@@ -124,18 +126,7 @@ export default function AdminUsers() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center px-6 pt-8 pb-8">
       {/* Header */}
-      <div className="w-full max-w-md flex justify-between items-start mb-6">
-        <h1 className="text-2xl font-bold leading-tight">
-          Live
-          <br />
-          Translating
-          <br />
-          Center
-          <br />
-          IPPC
-        </h1>
-        <img src="/IPPC_logo.png" alt="IPCC" className="h-36" />
-      </div>
+      <Header />
 
       <div className="w-full max-w-md bg-purple-400 text-white text-center rounded-full py-3 font-bold tracking-wide mb-6">
         UTILIZADORES
@@ -278,10 +269,7 @@ export default function AdminUsers() {
         ← Voltar
       </Link>
 
-      <footer className="w-full max-w-md text-center mt-6 text-xs text-gray-500">
-        <p className="font-semibold">Versão Beta</p>
-        <p>Desenvolvido por Hudson Peres</p>
-      </footer>
+      <Footer />
     </div>
   );
 }

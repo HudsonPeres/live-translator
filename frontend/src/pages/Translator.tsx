@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Room } from "livekit-client";
 import { getUser, logout, getToken as getJwt } from "../auth/auth";
 import { getToken } from "../api/client";
+import Footer from "../components/Footer";
+import Header from "../components/Header";
 
 type Language = "english" | "espanhol";
 
@@ -111,22 +113,7 @@ export default function Translator() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center px-6 pt-8 pb-8">
       {/* ===== HEADER ===== */}
-      <div className="w-full max-w-md flex justify-between items-start mb-6">
-        <h1 className="text-2xl font-bold leading-tight">
-          Live
-          <br />
-          Translating
-          <br />
-          Center
-          <br />
-          IPCC
-        </h1>
-        <img
-          src="/IPPC_logo.png"
-          alt="Igreja Portugal para Cristo"
-          className="h-36"
-        />
-      </div>
+      <Header />
 
       {/* ===== BEM VINDO ===== */}
       <p className="w-full max-w-md text-center text-lg font-semibold mb-4">
@@ -219,10 +206,7 @@ export default function Translator() {
       )}
 
       {/* ===== FOOTER ===== */}
-      <footer className="w-full max-w-md text-center mt-auto pt-8 text-xs text-gray-500">
-        <p className="font-semibold">Versão Beta</p>
-        <p>Desenvolvido por Hudson Peres</p>
-      </footer>
+      <Footer />
     </div>
   );
 }

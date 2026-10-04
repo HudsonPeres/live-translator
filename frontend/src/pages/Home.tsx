@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { getToken, getRoomStatus } from "../api/client";
+import Footer from "../components/Footer";
+import Header from "../components/Header";
 
 type Language = "english" | "espanhol";
 
@@ -149,24 +151,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center px-6 pt-8 pb-8">
       {/* ===== HEADER ===== */}
-      <div className="w-full max-w-md flex justify-between items-start mb-6">
-        <h1 className="text-2xl font-bold leading-tight">
-          Live
-          <br />
-          Translating
-          <br />
-          Center
-          <br />
-          IPPC
-          <br />
-          Covilhã
-        </h1>
-        <img
-          src="/IPPC_logo.png"
-          alt="Igreja Portugal para Cristo"
-          className="h-36"
-        />
-      </div>
+      <Header />
 
       {/* ===== SELECT LANGUAGE ===== */}
       <div className="w-full max-w-md mb-10">
@@ -268,10 +253,7 @@ export default function Home() {
       </Link>
 
       {/* ===== FOOTER ===== */}
-      <footer className="w-full max-w-md text-center mt-6 text-xs text-gray-500">
-        <p className="font-semibold">Versão Beta</p>
-        <p>Desenvolvido por Hudson Peres</p>
-      </footer>
+      <Footer />
     </div>
   );
 }

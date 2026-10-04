@@ -1,8 +1,9 @@
-// src/pages/EditProfile.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { updateProfile } from "../api/client";
 import { getUser, getToken, updateStoredUser } from "../auth/auth";
+import Footer from "../components/Footer";
+import Header from "../components/Header";
 
 export default function EditProfile() {
   const navigate = useNavigate();
@@ -54,23 +55,8 @@ export default function EditProfile() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center px-6 pt-8 pb-8">
-      {/* Header com logo */}
-      <div className="w-full max-w-md flex justify-between items-start mb-10">
-        <h1 className="text-2xl font-bold leading-tight">
-          Live
-          <br />
-          Translating
-          <br />
-          Center
-          <br />
-          IPPPC
-        </h1>
-        <img
-          src="/IPPC_logo.png"
-          alt="Igreja Portugal para Cristo"
-          className="h-36"
-        />
-      </div>
+      {/* Header */}
+      <Header />
 
       {/* Título PERFIL */}
       <div className="w-full max-w-md bg-purple-400 text-white text-center rounded-full py-3 font-bold tracking-wide text-lg mb-10">
@@ -141,10 +127,7 @@ export default function EditProfile() {
       </button>
 
       {/* Footer */}
-      <footer className="w-full max-w-md text-center mt-auto pt-8 text-xs text-gray-500">
-        <p className="font-semibold">Versão Beta</p>
-        <p>Desenvolvido por Hudson Peres</p>
-      </footer>
+      <Footer />
     </div>
   );
 }
